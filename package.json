@@ -1,0 +1,37 @@
+{
+  "name": "email-scraping-tool",
+  "version": "1.0.0",
+  "description": "Professional keyword-based public business email discovery tool",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "node backend/server.js"
+  },
+  "dependencies": {
+    "axios": "^1.16.1",
+    "cheerio": "^1.0.0-rc.12",
+    "cors": "^2.8.5",
+    "csv-writer": "^1.6.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.22.2",
+    "jimp": "^1.6.1",
+    "p-queue": "^6.6.2",
+    "puppeteer": "^22.15.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-adblocker": "^2.13.6",
+    "puppeteer-extra-plugin-recaptcha": "^3.6.8",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "socket.io": "^4.7.5",
+    "tesseract.js": "^7.0.0",
+    "user-agents": "^1.1.227",
+    "winston": "^3.19.0",
+    "xlsx": "^0.18.5"
+  },
+  "keywords": [
+    "email",
+    "scraper",
+    "business",
+    "discovery"
+  ],
+  "license": "MIT"
+}

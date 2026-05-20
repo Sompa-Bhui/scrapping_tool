@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Professional keyword-based public business email discovery and export tool">
+  <title>Email Scraping Tool — Business Email Discovery</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+
+    <!-- ── Header ── -->
+    <header class="app-header">
+      <h1>📧 Email Scraping Tool</h1>
+      <p>Keyword-Based Public Business Email Discovery</p>
+      <div class="header-controls">
+        <button class="theme-toggle" id="themeToggle" title="Toggle theme">🌙</button>
+      </div>
+    </header>
+
+    <!-- ── Search Panel ── -->
+    <section class="glass-card" id="searchPanel">
+      <div class="card-title"><span class="icon">🔍</span> Smart Search Panel</div>
+      <div class="search-grid">
+        <div class="form-group keyword-input">
+          <label for="keyword">Search Keyword</label>
+          <input type="text" id="keyword" placeholder='Search business keyword (example: solar company in delhi)' autocomplete="off">
+        </div>
+        <div class="search-row">
+          <div class="form-group">
+            <label for="pages">Search Pages</label>
+            <select id="pages">
+              <option value="1">1 page</option>
+              <option value="3">3 pages</option>
+              <option value="5" selected>5 pages</option>
+              <option value="10">10 pages</option>
+              <option value="20">20 pages</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="workers">Parallel Workers</label>
+            <select id="workers">
+              <option value="1">1 worker</option>
+              <option value="2">2 workers</option>
+              <option value="3">3 workers</option>
+              <option value="4">4 workers</option>
+              <option value="5" selected>5 workers</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Delay Range (seconds)</label>
+            <div class="range-container">
+              <span class="range-value" id="delayMinVal">2</span>
+              <input type="range" id="delayMin" min="1" max="10" value="2">
+              <span>—</span>
+              <input type="range" id="delayMax" min="2" max="15" value="7">
+              <span class="range-value" id="delayMaxVal">7</span>
+            </div>
+          </div>
+        </div>
+        <div class="search-row">
+          <div class="form-group">
+            <label>Scraping Mode</label>
+            <div class="mode-selector">
+              <button class="mode-btn" data-mode="safe">🛡️ Safe</button>
+              <button class="mode-btn active" data-mode="balanced">⚖️ Balanced</button>
+              <button class="mode-btn" data-mode="fast">⚡ Fast</button>
+            </div>
+          </div>
+          <div class="form-group" style="justify-content:flex-end">
+            <label class="filter-toggle">
+              <input type="checkbox" id="filterFree">
+              <span class="toggle-track"></span>
+              Filter free providers (Gmail, Yahoo, etc.)
+            </label>
+          </div>
+        </div>
+        <div class="action-buttons">
+          <button class="btn btn-primary" id="btnStart"><span class="spinner"></span><span class="btn-text">🚀 Start Scraping</span></button>
+          <button class="btn btn-warning" id="btnPause" disabled><span class="btn-text">⏸️ Pause</span></button>
+          <button class="btn btn-success" id="btnResume" disabled><span class="btn-text">▶️ Resume</span></button>
+          <button class="btn btn-danger" id="btnStop" disabled><span class="btn-text">🛑 Stop</span></button>
+          <button class="btn btn-outline" id="btnClear"><span class="btn-text">🗑️ Clear Results</span></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Dashboard ── -->
+    <section class="glass-card" id="dashboardPanel">
+      <div class="card-title"><span class="icon">📊</span> Live Dashboard</div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon">📧</div>
+          <div class="stat-value" id="statEmails">0</div>
+          <div class="stat-label">Emails Found</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">🌐</div>
+          <div class="stat-value" id="statProcessed">0</div>
+          <div class="stat-label">Websites Done</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📦</div>
+          <div class="stat-value" id="statQueue">0</div>
+          <div class="stat-label">Queue Left</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">❌</div>
+          <div class="stat-value" id="statFailed">0</div>
+          <div class="stat-label">Failed</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">⚡</div>
+          <div class="stat-value" id="statSpeed">0</div>
+          <div class="stat-label">Sites/Min</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">⏱️</div>
+          <div class="stat-value" id="statTime">0:00</div>
+          <div class="stat-label">Elapsed</div>
+        </div>
+      </div>
+      <div class="progress-section">
+        <div class="progress-info">
+          <span id="statusBadge" class="status-badge status-idle"><span class="status-dot"></span> Idle</span>
+          <span id="progressText">0%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      </div>
+    </section>
+
+    <!-- ── Live Logs ── -->
+    <section class="glass-card" id="logsPanel">
+      <div class="card-title"><span class="icon">📋</span> Live Scraping Logs</div>
+      <div class="log-container" id="logContainer">
+        <div class="log-empty">Logs will appear here when scraping starts...</div>
+      </div>
+    </section>
+
+    <!-- ── Results Table ── -->
+    <section class="glass-card" id="resultsPanel">
+      <div class="card-title"><span class="icon">📬</span> Email Results <span id="resultCount" style="font-size:0.8rem;color:var(--text-muted);font-weight:400;margin-left:auto">(0)</span></div>
+      <div class="table-controls">
+        <input type="text" class="search-input" id="tableSearch" placeholder="🔍 Search emails...">
+        <button class="btn btn-outline" id="btnSelectAll" style="padding:8px 14px;font-size:0.8rem">☑ Select All</button>
+        <button class="btn btn-danger" id="btnBulkDelete" disabled style="padding:8px 14px;font-size:0.8rem">🗑️ Delete Selected</button>
+      </div>
+      <div class="table-wrapper">
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th style="width:35px"><input type="checkbox" class="select-cb" id="selectAllCb"></th>
+              <th>Email</th>
+              <th>Company</th>
+              <th>Source</th>
+              <th>Status</th>
+              <th style="width:80px">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody">
+            <tr><td colspan="6" class="empty-table"><div class="empty-icon">📭</div><div>No emails found yet. Start scraping to see results.</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── Export ── -->
+    <section class="glass-card" id="exportPanel">
+      <div class="card-title"><span class="icon">💾</span> Export Results</div>
+      <div class="export-grid">
+        <button class="btn btn-primary" id="btnCSV">📄 Download CSV</button>
+        <button class="btn btn-success" id="btnXLSX">📊 Download XLSX</button>
+        <button class="btn btn-outline" id="btnCopyAll">📋 Copy All Emails</button>
+        <button class="btn btn-outline" id="btnCSVEmail">📄 CSV (Email Only)</button>
+        <button class="btn btn-outline" id="btnXLSXEmail">📊 XLSX (Email Only)</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ── CAPTCHA Modal ── -->
+  <div class="modal-overlay" id="captchaModal">
+    <div class="modal-box">
+      <div class="modal-icon">⚠️</div>
+      <div class="modal-title">Verification Challenge Detected</div>
+      <div class="modal-message" id="captchaMessage">Scraping has been paused. Complete any verification in your browser, then click Resume.</div>
+      <div class="modal-actions">
+        <button class="btn btn-success" id="btnModalResume">▶️ Resume Scraping</button>
+        <button class="btn btn-outline" id="btnModalDismiss">Dismiss</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="http://localhost:3000/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
