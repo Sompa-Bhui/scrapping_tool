@@ -6,9 +6,9 @@
 // Mode presets define delay ranges and recommended worker counts
 const MODE_PRESETS = {
   safe: {
-    delayMin: 5,
-    delayMax: 10,
-    readingDelay: { min: 2, max: 5 },
+    delayMin: 8,
+    delayMax: 15,
+    readingDelay: { min: 3, max: 6 },
     recommendedWorkers: 2,
     label: 'Safe Mode'
   },

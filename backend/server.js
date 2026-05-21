@@ -51,13 +51,19 @@ let queueManager = new QueueManager(io);
  * Start a new scraping session
  */
 app.post('/api/scrape/start', async (req, res) => {
+  const defaultWorkers = parseInt(process.env.DEFAULT_WORKERS) || 2;
+  const defaultDelayMin = parseInt(process.env.DEFAULT_DELAY_MIN) || 8;
+  const defaultDelayMax = parseInt(process.env.DEFAULT_DELAY_MAX) || 15;
+  const defaultPages = parseInt(process.env.DEFAULT_PAGES) || 2;
+  const defaultMode = process.env.DEFAULT_MODE || 'safe';
+
   const {
     keyword,
-    pages = 5,
-    workers = 5,
-    delayMin = 2,
-    delayMax = 7,
-    mode = 'balanced',
+    pages = defaultPages,
+    workers = defaultWorkers,
+    delayMin = defaultDelayMin,
+    delayMax = defaultDelayMax,
+    mode = defaultMode,
     filterFreeProviders = false
   } = req.body;
 

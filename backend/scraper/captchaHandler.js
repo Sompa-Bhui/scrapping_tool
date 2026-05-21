@@ -1223,6 +1223,127 @@ async function randomScroll(page) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  HTTP-based CAPTCHA Detection (for axios responses)                */
+/* ------------------------------------------------------------------ */
+const CAPTCHA_PATTERNS = [
+  'unusual traffic',
+  'automated queries',
+  'captcha',
+  'recaptcha',
+  'hcaptcha',
+  'verify you are human',
+  'verify you\'re human',
+  'are you a robot',
+  'bot detection',
+  'access denied',
+  'blocked',
+  'forbidden',
+  'too many requests',
+  'rate limit',
+  'challenge',
+  'security check',
+  'please verify',
+  'complete the security',
+  'prove you are human',
+  'suspicious activity',
+  'temporarily blocked',
+  'ip blocked',
+  'automated access',
+  'our systems have detected'
+];
+
+const BLOCKED_STATUS_CODES = [403, 429, 503, 451];
+
+function detectInContent(html) {
+  if (!html || typeof html !== 'string') {
+    return { detected: false, pattern: null };
+  }
+
+  const lowerHtml = html.toLowerCase();
+  for (const pattern of CAPTCHA_PATTERNS) {
+    if (lowerHtml.includes(pattern)) {
+      return { detected: true, pattern, type: 'content' };
+    }
+  }
+
+  const captchaElements = [
+    'g-recaptcha',
+    'h-captcha',
+    'cf-challenge',
+    'challenge-form',
+    'captcha-container',
+    'bot-check'
+  ];
+
+  for (const element of captchaElements) {
+    if (lowerHtml.includes(element)) {
+      return { detected: true, pattern: element, type: 'element' };
+    }
+  }
+
+  return { detected: false, pattern: null };
+}
+
+function detectByStatusCode(statusCode) {
+  if (BLOCKED_STATUS_CODES.includes(statusCode)) {
+    return { detected: true, pattern: `HTTP ${statusCode}`, type: 'status' };
+  }
+  return { detected: false, pattern: null };
+}
+
+function detectByRedirect(originalUrl, finalUrl) {
+  if (!originalUrl || !finalUrl) return { detected: false, pattern: null };
+
+  const captchaRedirectPatterns = [
+    'captcha',
+    'challenge',
+    'verify',
+    'blocked',
+    'sorry',
+    'consent',
+    'security-check'
+  ];
+
+  const finalLower = finalUrl.toLowerCase();
+  for (const pattern of captchaRedirectPatterns) {
+    if (finalLower.includes(pattern) && !originalUrl.toLowerCase().includes(pattern)) {
+      return { detected: true, pattern: `Redirect to ${pattern} page`, type: 'redirect' };
+    }
+  }
+
+  return { detected: false, pattern: null };
+}
+
+function fullCheck(response, originalUrl) {
+  if (response && response.status) {
+    const statusCheck = detectByStatusCode(response.status);
+    if (statusCheck.detected) return statusCheck;
+  }
+
+  if (response && response.request && response.request.res && response.request.res.responseUrl) {
+    const redirectCheck = detectByRedirect(originalUrl, response.request.res.responseUrl);
+    if (redirectCheck.detected) return redirectCheck;
+  }
+
+  const data = response && typeof response.data === 'string' ? response.data : '';
+  const contentCheck = detectInContent(data);
+  if (contentCheck.detected) return contentCheck;
+
+  return { detected: false, pattern: null };
+}
+
+function generateAlert(detection) {
+  return {
+    type: 'captcha_detected',
+    title: 'Verification Challenge Detected',
+    message: `Scraping has been paused due to: ${detection.pattern}`,
+    instructions: 'Complete any verification in your browser, then click Resume to continue.',
+    severity: detection.type === 'status' ? 'warning' : 'error',
+    timestamp: new Date().toISOString()
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /*  Existing functions maintained with minor enhancements             */
 /* ------------------------------------------------------------------ */
 
@@ -1390,6 +1511,11 @@ module.exports = {
   handleCaptcha,
   automateWithCaptcha,
   detectCaptcha,
+  detectInContent,
+  detectByStatusCode,
+  detectByRedirect,
+  fullCheck,
+  generateAlert,
   solveImageCaptcha,
   clickRecaptchaCheckbox,
   verifyCaptchaSolved,

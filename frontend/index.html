@@ -32,8 +32,9 @@
             <label for="pages">Search Pages</label>
             <select id="pages">
               <option value="1">1 page</option>
+              <option value="2" selected>2 pages</option>
               <option value="3">3 pages</option>
-              <option value="5" selected>5 pages</option>
+              <option value="5">5 pages</option>
               <option value="10">10 pages</option>
               <option value="20">20 pages</option>
             </select>
@@ -41,21 +42,21 @@
           <div class="form-group">
             <label for="workers">Parallel Workers</label>
             <select id="workers">
-              <option value="1">1 worker</option>
+              <option value="1" selected>1 worker</option>
               <option value="2">2 workers</option>
               <option value="3">3 workers</option>
               <option value="4">4 workers</option>
-              <option value="5" selected>5 workers</option>
+              <option value="5">5 workers</option>
             </select>
           </div>
           <div class="form-group">
             <label>Delay Range (seconds)</label>
             <div class="range-container">
-              <span class="range-value" id="delayMinVal">2</span>
-              <input type="range" id="delayMin" min="1" max="10" value="2">
+              <span class="range-value" id="delayMinVal">8</span>
+              <input type="range" id="delayMin" min="1" max="10" value="8">
               <span>—</span>
-              <input type="range" id="delayMax" min="2" max="15" value="7">
-              <span class="range-value" id="delayMaxVal">7</span>
+              <input type="range" id="delayMax" min="2" max="15" value="15">
+              <span class="range-value" id="delayMaxVal">15</span>
             </div>
           </div>
         </div>
@@ -63,8 +64,8 @@
           <div class="form-group">
             <label>Scraping Mode</label>
             <div class="mode-selector">
-              <button class="mode-btn" data-mode="safe">🛡️ Safe</button>
-              <button class="mode-btn active" data-mode="balanced">⚖️ Balanced</button>
+              <button class="mode-btn active" data-mode="safe">🛡️ Safe</button>
+              <button class="mode-btn" data-mode="balanced">⚖️ Balanced</button>
               <button class="mode-btn" data-mode="fast">⚡ Fast</button>
             </div>
           </div>

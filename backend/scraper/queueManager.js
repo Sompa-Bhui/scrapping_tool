@@ -130,6 +130,9 @@ class QueueManager {
     this.log(`📋 Keyword: "${config.keyword}"`, 'info');
     this.log(`⚙️ Mode: ${config.mode} | Workers: ${config.workers} | Pages: ${config.pages}`, 'info');
 
+    this.log('🧭 Launching browser window for scraping...', 'info');
+    await browserFallback.warmupBrowser();
+
     try {
       // Phase 1: Search Google results (and extract snippet emails)
       const searchResults = await searchEngine.search(config.keyword, {
@@ -432,14 +435,34 @@ class QueueManager {
     this.isPaused = true;
     if (this.queue) this.queue.pause();
 
-    const cooldownMs = delayManager.getCooldownDuration(
-      parseInt(process.env.CAPTCHA_COOLDOWN_MIN) || 60,
-      parseInt(process.env.CAPTCHA_COOLDOWN_MAX) || 120
-    );
+    const isRateLimit = detection && typeof detection.pattern === 'string' && detection.pattern.includes('429');
+
+    if (isRateLimit && this.config) {
+      const slowWorkers = parseInt(process.env.RATE_LIMIT_WORKERS) || 1;
+      const slowDelayMin = parseInt(process.env.RATE_LIMIT_DELAY_MIN) || 10;
+      const slowDelayMax = parseInt(process.env.RATE_LIMIT_DELAY_MAX) || 20;
+
+      this.config.mode = 'safe';
+      this.config.workers = Math.min(this.config.workers || slowWorkers, slowWorkers);
+      this.config.delayMin = Math.max(this.config.delayMin || 0, slowDelayMin);
+      this.config.delayMax = Math.max(this.config.delayMax || 0, slowDelayMax);
+
+      if (this.queue) this.queue.concurrency = this.config.workers;
+      this.log('Rate limit detected. Switching to safe mode with slower delays.', 'warning');
+    }
+
+    const cooldownMin = isRateLimit
+      ? parseInt(process.env.RATE_LIMIT_COOLDOWN_MIN) || 300
+      : parseInt(process.env.CAPTCHA_COOLDOWN_MIN) || 60;
+    const cooldownMax = isRateLimit
+      ? parseInt(process.env.RATE_LIMIT_COOLDOWN_MAX) || 600
+      : parseInt(process.env.CAPTCHA_COOLDOWN_MAX) || 120;
+
+    const cooldownMs = delayManager.getCooldownDuration(cooldownMin, cooldownMax);
 
     this.stats.status = 'cooldown';
     this.emitStats();
-    this.log(`❄️ Cooling down for ${(cooldownMs / 1000).toFixed(0)}s due to CAPTCHA...`, 'warning');
+    this.log(`Cooling down for ${(cooldownMs / 1000).toFixed(0)}s due to CAPTCHA...`, 'warning');
 
     setTimeout(() => {
       if (this.isStopped) return;

@@ -42,7 +42,7 @@ const els = {
 };
 
 // ── State ──
-let currentMode = 'balanced';
+let currentMode = 'safe';
 let allResults = [];
 let selectedIds = new Set();
 let isRunning = false;
@@ -65,7 +65,7 @@ $$('.mode-btn').forEach(btn => {
     btn.classList.add('active');
     currentMode = btn.dataset.mode;
     // Apply mode presets
-    const presets = { safe: [5, 10], balanced: [2, 7], fast: [1, 3] };
+    const presets = { safe: [8, 15], balanced: [2, 7], fast: [1, 3] };
     const [min, max] = presets[currentMode];
     els.delayMin.value = min;
     els.delayMax.value = max;

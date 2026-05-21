@@ -58,6 +58,14 @@ async function closeBrowser() {
 }
 
 /**
+ * Warm up the browser instance so a window opens early
+ * @returns {Promise<Browser>}
+ */
+async function warmupBrowser() {
+  return getBrowser();
+}
+
+/**
  * Simulate human-like scrolling and mouse movement behavior
  * @param {Page} page - Puppeteer page
  */
@@ -230,5 +238,6 @@ async function scrapeWithBrowser(url, options = {}) {
 module.exports = {
   scrapeWithBrowser,
   closeBrowser,
-  getBrowser
+  getBrowser,
+  warmupBrowser
 };
