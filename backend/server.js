@@ -56,6 +56,7 @@ app.post('/api/scrape/start', async (req, res) => {
   const defaultDelayMax = parseInt(process.env.DEFAULT_DELAY_MAX) || 15;
   const defaultPages = parseInt(process.env.DEFAULT_PAGES) || 2;
   const defaultMode = process.env.DEFAULT_MODE || 'safe';
+  const defaultEmailOnly = process.env.EMAIL_ONLY_MODE === 'true';
 
   const {
     keyword,
@@ -64,6 +65,7 @@ app.post('/api/scrape/start', async (req, res) => {
     delayMin = defaultDelayMin,
     delayMax = defaultDelayMax,
     mode = defaultMode,
+    emailOnly = defaultEmailOnly,
     filterFreeProviders = false
   } = req.body;
 
@@ -82,6 +84,7 @@ app.post('/api/scrape/start', async (req, res) => {
     delayMin: parseFloat(delayMin),
     delayMax: parseFloat(delayMax),
     mode,
+    emailOnly,
     filterFreeProviders
   }).catch(err => {
     console.error('Scraping error:', err);

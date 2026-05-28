@@ -106,7 +106,7 @@ async function simulateScroll(page) {
  */
 async function scrapeWithBrowser(url, options = {}) {
   const { mode = 'balanced', onLog = () => {} } = options;
-  const pageTimeout = parseInt(process.env.PAGE_TIMEOUT) || 15000;
+  const pageTimeout = parseInt(process.env.PAGE_TIMEOUT) || 60000;
 
   let page = null;
 
@@ -145,7 +145,7 @@ async function scrapeWithBrowser(url, options = {}) {
 
     // Navigate to the page
     const response = await page.goto(url, {
-      waitUntil: 'domcontentloaded',
+      waitUntil: 'networkidle2',
       timeout: pageTimeout
     });
 
@@ -173,12 +173,13 @@ async function scrapeWithBrowser(url, options = {}) {
     html = await page.content();
 
     // Extract emails from main page
-    let allEmails = emailExtractor.extractFromHTML(html);
-    onLog(`  📧 Found ${allEmails.length} emails on main page`);
+    const mainPageEmails = emailExtractor.extractFromHTML(html);
+    let allExtracted = mainPageEmails.map(email => ({ email, source: url }));
+    onLog(`  📧 Found ${mainPageEmails.length} emails on main page`);
 
     // Try to find and visit contact/about pages
     const contactPages = emailExtractor.findContactPages(html, url);
-    if (contactPages.length > 0 && allEmails.length < 3) {
+    if (contactPages.length > 0) {
       // Visit at most 3 contact pages
       const pagesToVisit = contactPages.slice(0, 3);
 
@@ -190,7 +191,7 @@ async function scrapeWithBrowser(url, options = {}) {
           onLog(`  📄 Checking: ${new URL(contactUrl).pathname}`);
 
           await page.goto(contactUrl, {
-            waitUntil: 'domcontentloaded',
+            waitUntil: 'networkidle2',
             timeout: pageTimeout
           });
 
@@ -199,7 +200,10 @@ async function scrapeWithBrowser(url, options = {}) {
 
           const contactHtml = await page.content();
           const contactEmails = emailExtractor.extractFromHTML(contactHtml);
-          allEmails = [...allEmails, ...contactEmails];
+          
+          contactEmails.forEach(email => {
+            allExtracted.push({ email, source: contactUrl });
+          });
 
           onLog(`  📧 Found ${contactEmails.length} emails on contact page`);
         } catch (error) {
@@ -209,7 +213,7 @@ async function scrapeWithBrowser(url, options = {}) {
     }
 
     return {
-      emails: allEmails,
+      emails: allExtracted, // Now an array of { email, source }
       captcha: false,
       pagesScanned: 1 + Math.min(contactPages.length, 3)
     };

@@ -282,6 +282,9 @@ function animateCounter(id, target) {
   const timer = setInterval(() => {
     step++;
     el.textContent = Math.round(current + increment * step);
+    if (this.isStopped) {
+      return;
+    }
     if (step >= steps) {
       el.textContent = target;
       clearInterval(timer);
@@ -346,12 +349,17 @@ function buildRowHtml(r) {
   const checked = selectedIds.has(r.id) ? 'checked' : '';
   const selected = selectedIds.has(r.id) ? 'selected' : '';
   const statusClass = r.status === 'Business' ? 'badge-business' : 'badge-general';
-  const sourceClass = r.source === 'HTTP' ? 'badge-http' : 'badge-browser';
+  
+  // Website name from 'company' field (domain)
+  const websiteName = r.company || 'Website';
+  
+  // Link to the exact page where it was found
+  const websiteHtml = `<a href="${r.source}" target="_blank" class="source-link" title="Visit: ${escapeHtml(r.source)}">🔗 ${escapeHtml(websiteName)}</a>`;
+
   return `<tr class="${selected}" data-id="${r.id}">
     <td><input type="checkbox" class="select-cb row-cb" data-id="${r.id}" ${checked}></td>
+    <td class="company-cell">${websiteHtml}</td>
     <td class="email-cell">${escapeHtml(r.email)}</td>
-    <td class="company-cell">${escapeHtml(r.company)}</td>
-    <td><span class="badge ${sourceClass}">${r.source}</span></td>
     <td><span class="badge ${statusClass}">${r.status}</span></td>
     <td><div class="row-actions">
       <button class="row-btn copy-btn" data-email="${escapeHtml(r.email)}" title="Copy email">📋</button>

@@ -135,7 +135,7 @@ class QueueManager {
 
     try {
       // Phase 1: Search Google results (and extract snippet emails)
-      const searchResults = await searchEngine.search(config.keyword, {
+      const searchData = await searchEngine.search(config.keyword, {
         pages: config.pages,
         mode: config.mode,
         delayMin: config.delayMin,
@@ -147,10 +147,15 @@ class QueueManager {
           this.stats.searchPagesTotal = progress.total;
           this.emitStats();
         },
+        emailOnly: config.emailOnly === true,
         shouldStop: () => this.isStopped,
         isPaused: () => this.isPaused,
         isStopped: () => this.isStopped
       });
+
+      const searchResults = searchData.results || [];
+      const pageEmails = searchData.pageEmails || [];
+      const emailOnlyMode = config.emailOnly === true;
 
       if (this.isStopped) {
         this.stats.status = 'stopped';
@@ -158,74 +163,30 @@ class QueueManager {
         return;
       }
 
-      if (searchResults.length === 0) {
-        this.log('⚠️ No websites found. Try a different keyword.', 'warning');
+      if (searchResults.length === 0 && pageEmails.length === 0) {
+        this.log('⚠️ No emails found on search pages. Try a different keyword.', 'warning');
         this.stats.status = 'completed';
         this.emitStats();
         return;
       }
 
-      // Phase 2: Save and display snippet emails directly!
+      // Phase 2: Search processing (No longer extracting snippet emails)
       this.stats.status = 'scraping';
       this.emitStats();
-      this.log(`\n📦 Extracting emails from Google Search snippets directly (no site visits required)...`, 'info');
+      this.log(`\n🔎 Search complete. Starting deep website scans to find verified emails...`, 'info');
       
-      // Auto-bypass 'Exclude Free Providers' filter if keyword targets free providers (like gmail.com, yahoo.com, or @ symbol)
-      const lowerKeyword = (config.keyword || '').toLowerCase();
-      const hasFreeDomainTarget = lowerKeyword.includes('gmail') || 
-                                  lowerKeyword.includes('yahoo') || 
-                                  lowerKeyword.includes('hotmail') || 
-                                  lowerKeyword.includes('outlook') || 
-                                  lowerKeyword.includes('aol') || 
-                                  lowerKeyword.includes('mail.com') ||
-                                  lowerKeyword.includes('@');
-      
-      const shouldFilterFree = hasFreeDomainTarget ? false : config.filterFreeProviders;
+      if (emailOnlyMode) {
+        this.log('⚠️ Email-only mode is active, but we now require website visits for source verification. Proceeding with website scans.', 'info');
+      }
 
       let processedCount = 0;
-      for (const res of searchResults) {
-        processedCount++;
-        if (res.emails && res.emails.length > 0) {
-          // Filter emails
-          const filtered = emailExtractor.filterEmails(res.emails, {
-            filterFreeProviders: shouldFilterFree
-          });
-
-          let newCount = 0;
-          for (const emailObj of filtered) {
-            if (!this.seenEmails.has(emailObj.email)) {
-              this.seenEmails.add(emailObj.email);
-              const result = {
-                id: Date.now() + Math.random().toString(36).substr(2, 5),
-                email: emailObj.email,
-                company: res.domain,
-                source: 'Google Snippet',
-                keyword: config.keyword,
-                status: emailObj.isBusiness ? 'Business' : 'General',
-                domain: emailObj.domain,
-                timestamp: new Date().toISOString()
-              };
-              this.results.push(result);
-              this.emitResult(result);
-              newCount++;
-            }
-          }
-          if (newCount > 0) {
-            this.stats.totalEmails += newCount;
-            this.log(`✅ Found ${newCount} email(s) for ${res.domain} directly in snippet!`, 'success');
-          }
-        }
-        
-        this.stats.websitesProcessed = processedCount;
-        this.stats.queueRemaining = searchResults.length - processedCount;
-        this.emitStats();
-      }
+      this.stats.websitesProcessed = 0;
+      this.stats.queueRemaining = searchResults.length;
+      this.emitStats();
 
       if (this.isStopped) {
         return;
       }
-
-      this.log(`\n✅ Snippet scan complete. Starting website scans for more emails...`, 'success');
 
       // Phase 3: Visit websites and extract additional emails
       const totalSites = searchResults.length;
@@ -273,155 +234,177 @@ class QueueManager {
 
     this.log(`\n👷 Worker ${workerNum} → [${index}/${total}] ${hostname}`);
 
-    try {
-      // --- Phase A: Fast HTML scan (axios + cheerio) ---
-      let emails = [];
-      let usedBrowser = false;
+    const maxRetries = 2; 
+    let success = false;
+    let attempt = 0;
+
+    while (attempt <= maxRetries && !success) {
+      if (this.isStopped) return;
+      
+      if (attempt > 0) {
+        this.log(`  🔄 Retry ${attempt}/${maxRetries} for ${hostname}...`, 'warning');
+        await new Promise(r => setTimeout(r, 3000));
+      }
 
       try {
-        const userAgent = new UserAgent({ deviceCategory: 'desktop' });
-        const response = await axios.get(url, {
-          headers: {
-            'User-Agent': userAgent.toString(),
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9'
-          },
-          timeout: 10000,
-          maxRedirects: 3,
-          validateStatus: (status) => status < 500
-        });
+        // --- Phase A: Fast HTML scan (axios + cheerio) ---
+        let rawExtracted = []; // Array of { email, source }
+        let usedBrowser = false;
 
-        // Check for CAPTCHA
-        const captchaCheck = captchaHandler.fullCheck(response, url);
-        if (captchaCheck.detected) {
-          this.handleCaptcha(captchaCheck);
-          this.stats.failedAttempts++;
-          this.stats.queueRemaining--;
-          this.emitStats();
-          return;
-        }
+        try {
+          const userAgent = new UserAgent({ deviceCategory: 'desktop' });
+          const response = await axios.get(url, {
+            headers: {
+              'User-Agent': userAgent.toString(),
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9'
+            },
+            timeout: 30000,
+            maxRedirects: 3,
+            validateStatus: (status) => status < 500
+          });
 
-        const html = response.data;
-        emails = emailExtractor.extractFromHTML(html);
+          // Check for CAPTCHA
+          const captchaCheck = captchaHandler.fullCheck(response, url);
+          if (captchaCheck.detected) {
+            this.handleCaptcha(captchaCheck);
+            this.stats.failedAttempts++;
+            this.stats.queueRemaining--;
+            this.emitStats();
+            return;
+          }
 
-        // If few emails found, also check contact pages via HTTP
-        if (emails.length < 3) {
+          const html = response.data;
+          const mainEmails = emailExtractor.extractFromHTML(html);
+          mainEmails.forEach(e => rawExtracted.push({ email: e, source: url }));
+
+          // Always check contact pages in deep mode
           const contactPages = emailExtractor.findContactPages(html, url);
           for (const contactUrl of contactPages.slice(0, 3)) {
             try {
               await delayManager.sleep(0.5, 1.5);
               const contactResponse = await axios.get(contactUrl, {
                 headers: { 'User-Agent': userAgent.toString() },
-                timeout: 8000,
+                timeout: 15000,
                 maxRedirects: 2,
                 validateStatus: (status) => status < 500
               });
               const contactEmails = emailExtractor.extractFromHTML(contactResponse.data);
-              emails = [...emails, ...contactEmails];
+              contactEmails.forEach(e => rawExtracted.push({ email: e, source: contactUrl }));
             } catch {
               // Contact page failed, skip
             }
           }
+
+          this.log(`  ⚡ Fast scan: ${rawExtracted.length} emails found`);
+
+        } catch (error) {
+          // If this was a timeout or network error, we might want to retry rather than going to browser
+          // But for now, let's treat it as "try browser fallback"
+          this.log(`  ⚠️ Fast scan failed: ${error.message}`, 'warning');
         }
 
-        this.log(`  ⚡ Fast scan: ${emails.length} emails found`);
+        // --- Phase B: Browser fallback if no emails found ---
+        if (rawExtracted.length === 0) {
+          this.log(`  🌐 No emails in fast scan, trying browser fallback...`);
+          usedBrowser = true;
 
-      } catch (error) {
-        this.log(`  ⚠️ Fast scan failed: ${error.message}`, 'warning');
-      }
+          const browserResult = await browserFallback.scrapeWithBrowser(url, {
+            mode: this.config.mode,
+            onLog: (msg) => this.log(msg)
+          });
 
-      // --- Phase B: Browser fallback if no emails found ---
-      if (emails.length === 0) {
-        this.log(`  🌐 No emails in fast scan, trying browser fallback...`);
-        usedBrowser = true;
+          if (browserResult.captcha) {
+            this.handleCaptcha({
+              detected: true,
+              pattern: browserResult.error || 'Browser CAPTCHA',
+              type: 'browser'
+            });
+            this.stats.failedAttempts++;
+            this.stats.queueRemaining--;
+            this.emitStats();
+            return;
+          }
 
-        const browserResult = await browserFallback.scrapeWithBrowser(url, {
-          mode: this.config.mode,
-          onLog: (msg) => this.log(msg)
+          if (browserResult.error && attempt < maxRetries) {
+             // If browser also errored, throw to trigger retry loop
+             throw new Error(browserResult.error);
+          }
+
+          rawExtracted = browserResult.emails || [];
+          this.log(`  🌐 Browser fallback: ${rawExtracted.length} emails found`);
+        }
+
+        // --- Phase C: Filter and deduplicate ---
+        let newCount = 0;
+        const emailStrings = rawExtracted.map(item => item.email);
+        const filteredResults = emailExtractor.filterEmails(emailStrings, {
+          filterFreeProviders: this.config.filterFreeProviders
         });
 
-        if (browserResult.captcha) {
-          this.handleCaptcha({
-            detected: true,
-            pattern: browserResult.error || 'Browser CAPTCHA',
-            type: 'browser'
+        for (const emailObj of filteredResults) {
+          if (!this.seenEmails.has(emailObj.email)) {
+            this.seenEmails.add(emailObj.email);
+            const original = rawExtracted.find(item => item.email === emailObj.email);
+            const sourceUrl = original ? original.source : url;
+
+            const result = {
+              id: Date.now() + Math.random().toString(36).substr(2, 5),
+              email: emailObj.email,
+              company: hostname.replace('www.', ''),
+              source: sourceUrl,
+              keyword: this.config.keyword,
+              status: emailObj.isBusiness ? 'Business' : 'General',
+              domain: emailObj.domain,
+              timestamp: new Date().toISOString()
+            };
+            this.results.push(result);
+            this.emitResult(result);
+            newCount++;
+          }
+        }
+
+        if (newCount > 0) {
+          this.log(`  ✅ ${newCount} new unique email(s) saved`, 'success');
+          this.stats.totalEmails += newCount;
+        } else if (rawExtracted.length > 0) {
+          this.log(`  ℹ️ ${rawExtracted.length} email(s) found but all duplicates or invalid`, 'info');
+        } else {
+          this.log(`  ○ No business emails found`, 'info');
+        }
+
+        this.stats.websitesProcessed++;
+        this.stats.queueRemaining--;
+        this.emitStats();
+        success = true;
+
+        // --- Phase D: Cooldown check ---
+        this.processedCount++;
+        if (this.processedCount > 0 && this.processedCount % this.cooldownThreshold === 0) {
+          const cooldownMs = delayManager.getCooldownDuration(20, 30);
+          this.stats.status = 'cooldown';
+          this.emitStats();
+          this.log(`\n❄️ Cooldown for ${(cooldownMs / 1000).toFixed(0)}s (processed ${this.processedCount} sites)...`, 'warning');
+          await new Promise(r => setTimeout(r, cooldownMs));
+          this.stats.status = 'scraping';
+          this.emitStats();
+        } else {
+          await delayManager.executeDelay({
+            delayMin: this.config.delayMin,
+            delayMax: this.config.delayMax,
+            mode: this.config.mode
           });
+        }
+
+      } catch (error) {
+        attempt++;
+        if (attempt > maxRetries) {
+          this.log(`  ❌ Failed after ${maxRetries + 1} attempts: ${error.message}`, 'error');
           this.stats.failedAttempts++;
           this.stats.queueRemaining--;
           this.emitStats();
-          return;
-        }
-
-        emails = browserResult.emails || [];
-        this.log(`  🌐 Browser fallback: ${emails.length} emails found`);
-      }
-
-      // --- Phase C: Filter and deduplicate ---
-      const filtered = emailExtractor.filterEmails(emails, {
-        filterFreeProviders: this.config.filterFreeProviders
-      });
-
-      let newCount = 0;
-      for (const emailObj of filtered) {
-        if (!this.seenEmails.has(emailObj.email)) {
-          this.seenEmails.add(emailObj.email);
-          const result = {
-            id: Date.now() + Math.random().toString(36).substr(2, 5),
-            email: emailObj.email,
-            company: hostname.replace('www.', ''),
-            source: usedBrowser ? 'Browser' : 'HTTP',
-            keyword: this.config.keyword,
-            status: emailObj.isBusiness ? 'Business' : 'General',
-            domain: emailObj.domain,
-            timestamp: new Date().toISOString()
-          };
-          this.results.push(result);
-          this.emitResult(result);
-          newCount++;
         }
       }
-
-      if (newCount > 0) {
-        this.log(`  ✅ ${newCount} new unique email(s) saved`, 'success');
-        this.stats.totalEmails += newCount;
-      } else if (filtered.length > 0) {
-        this.log(`  ℹ️ ${filtered.length} email(s) found but all duplicates`, 'info');
-      } else {
-        this.log(`  ○ No business emails found`, 'info');
-      }
-
-      this.stats.websitesProcessed++;
-      this.stats.queueRemaining--;
-      this.emitStats();
-
-      // --- Phase D: Cooldown check ---
-      this.processedCount++;
-      if (this.processedCount > 0 && this.processedCount % this.cooldownThreshold === 0) {
-        const cooldownMs = delayManager.getCooldownDuration(
-          parseInt(process.env.COOLDOWN_MIN) || 20,
-          parseInt(process.env.COOLDOWN_MAX) || 30
-        );
-        this.stats.status = 'cooldown';
-        this.emitStats();
-        this.log(`\n❄️ Cooling down for ${(cooldownMs / 1000).toFixed(0)}s (processed ${this.processedCount} websites)...`, 'warning');
-        await new Promise(r => setTimeout(r, cooldownMs));
-        this.stats.status = 'scraping';
-        this.emitStats();
-        this.log(`✅ Cooldown complete, resuming...`, 'success');
-      } else {
-        // Random delay between websites
-        await delayManager.executeDelay({
-          delayMin: this.config.delayMin,
-          delayMax: this.config.delayMax,
-          mode: this.config.mode
-        });
-      }
-
-    } catch (error) {
-      this.log(`  ❌ Error processing ${hostname}: ${error.message}`, 'error');
-      this.stats.failedAttempts++;
-      this.stats.queueRemaining--;
-      this.emitStats();
     }
   }
 

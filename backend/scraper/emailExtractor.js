@@ -59,6 +59,35 @@ function decodeHtmlEntities(value) {
     .replace(/&nbsp;|&#160;/gi, ' ');
 }
 
+function normalizeEmail(email) {
+  if (!email || typeof email !== 'string') return '';
+
+  let value = decodeHtmlEntities(email);
+  value = safeDecodeURIComponent(value);
+  value = value.replace(/[\s<>]/g, '');
+  value = value.replace(/["'`]/g, '');
+  value = value.replace(/^[,;:()]+/, '').replace(/[,;:()]+$/g, '');
+
+  const parts = value.split('@');
+  if (parts.length !== 2) return value.toLowerCase();
+
+  let [local, domain] = parts;
+  local = local.replace(/^[.+-]+/, '').replace(/[.+-]+$/, '');
+  domain = domain.replace(/^[.]+/, '').replace(/[\s.,;:()]+$/g, '');
+
+  return `${local}@${domain}`.toLowerCase();
+}
+
+function isFreeProviderWithSuffix(email) {
+  const domain = email.split('@')[1];
+  if (!domain) return false;
+
+  return FREE_PROVIDERS.some(provider => {
+    if (domain === provider) return false;
+    return domain.startsWith(provider + '.') || domain.endsWith('.' + provider) || domain.includes(provider + '.');
+  });
+}
+
 function decodeCfEmail(encoded) {
   if (!encoded || encoded.length < 4) return null;
   const key = parseInt(encoded.slice(0, 2), 16);
@@ -310,7 +339,8 @@ function filterEmails(emails, options = {}) {
   const seen = new Set();
 
   for (const email of emails) {
-    const cleaned = email.toLowerCase().trim();
+    const cleaned = normalizeEmail(email);
+    if (!cleaned) continue;
 
     // Skip duplicates
     if (seen.has(cleaned)) continue;
@@ -318,6 +348,9 @@ function filterEmails(emails, options = {}) {
 
     // Skip invalid
     if (!isValidEmail(cleaned)) continue;
+
+    // Skip malformed free-provider suffixes (e.g., gmail.com.book)
+    if (isFreeProviderWithSuffix(cleaned)) continue;
 
     // Skip fake/placeholder
     if (isFakeEmail(cleaned)) continue;

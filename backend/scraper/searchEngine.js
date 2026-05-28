@@ -194,12 +194,14 @@ async function search(keyword, options = {}) {
     onLog = () => {},
     onCaptcha = () => {},
      onProgress = () => {},
+    emailOnly = false,
     shouldStop = () => false,
     isPaused = () => false,
     isStopped = () => false
   } = options;
 
   const allResults = [];
+  const allPageEmails = new Set();
   const seenDomains = new Set();
 
   onLog(`🔍 Searching: "${keyword}"`);
@@ -246,6 +248,9 @@ async function search(keyword, options = {}) {
         const finalUrl = searchPage.url();
         const html = await searchPage.content();
 
+        const pageEmails = emailExtractor.extractFromHTML(html) || [];
+        pageEmails.forEach(e => allPageEmails.add(e));
+
         // Check for CAPTCHA
         let captchaCheck = { detected: false };
 
@@ -283,25 +288,29 @@ async function search(keyword, options = {}) {
           continue;
         }
 
-        // Parse results
-        const pageResults = parseSearchResults(html);
-        onLog(`  Found ${pageResults.length} websites on search page ${page + 1}`);
+        if (emailOnly) {
+          onLog(`  Collected ${pageEmails.length} email(s) on search page ${page + 1}`);
+        } else {
+          // Parse results
+          const pageResults = parseSearchResults(html);
+          onLog(`  Found ${pageResults.length} websites on search page ${page + 1}`);
 
-        onProgress({ current: page + 1, total: pages });
-
-        // Extract and record emails found directly on the search page snippets
-        for (const res of pageResults) {
-          if (!seenDomains.has(res.domain)) {
-            seenDomains.add(res.domain);
-            allResults.push(res);
-          } else {
-            // Merge emails if domain seen already
-            const existing = allResults.find(r => r.domain === res.domain);
-            if (existing && res.emails.length > 0) {
-              existing.emails = [...new Set([...existing.emails, ...res.emails])];
+          // Extract and record emails found directly on the search page snippets
+          for (const res of pageResults) {
+            if (!seenDomains.has(res.domain)) {
+              seenDomains.add(res.domain);
+              allResults.push(res);
+            } else {
+              // Merge emails if domain seen already
+              const existing = allResults.find(r => r.domain === res.domain);
+              if (existing && res.emails.length > 0) {
+                existing.emails = [...new Set([...existing.emails, ...res.emails])];
+              }
             }
           }
         }
+
+        onProgress({ current: page + 1, total: pages });
 
         // Delay between pages (not after last page) - Using slow dedicated search delays
         if (page < pages - 1) {
@@ -328,8 +337,12 @@ async function search(keyword, options = {}) {
     onLog(`❌ Browser search failed to initialize: ${err.message}`);
   }
 
-  onLog(`✅ Search complete. Found ${allResults.length} unique websites in search results.`);
-  return allResults;
+  if (emailOnly) {
+    onLog(`✅ Search complete. Collected ${allPageEmails.size} email(s) from search pages.`);
+  } else {
+    onLog(`✅ Search complete. Found ${allResults.length} unique websites in search results.`);
+  }
+  return { results: allResults, pageEmails: Array.from(allPageEmails) };
 }
 
 module.exports = { search, parseSearchResults, shouldSkipUrl };
